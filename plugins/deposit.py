@@ -3,7 +3,8 @@ import qrcode
 import io
 from hydrogram import Client, filters, enums
 from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, CallbackQuery, Message
-from config import ADMINS, PAYMENT_UPI_ID, BINANCE_ID, TRC20_ADDRESS, ADMIN_GROUP_ID
+from config import ADMINS, PAYMENT_UPI_ID, BINANCE_ID, TRC20_ADDRESS, ADMIN_GROUP_ID, BHARATPE_MERCHANT_ID, BHARATPE_TOKEN, DIVIDER
+import aiohttp
 from database import get_user, update_balance, create_deposit, get_deposit
 from utils import format_price
 
@@ -16,6 +17,66 @@ deposit_session = {}
 def clear_deposit_session(user_id):
     if user_id in deposit_session:
         del deposit_session[user_id]
+
+async def verify_bharatpe_payment(utr: str, amount: float) -> str:
+    """
+    Verifies transaction from BharatPe API.
+    Returns 'SUCCESS', 'DUPLICATE', 'NOT_FOUND', or 'API_ERROR'.
+    """
+    # 1. First check if UTR already exists in DB
+    existing = await get_deposit(utr)
+    if existing:
+        return 'DUPLICATE'
+
+    # 2. Query BharatPe API
+    url = "https://payments-tesseract.bharatpe.in/api/v1/merchant/transactions"
+    params = {
+        "module": "PAYMENT_QR",
+        "merchantId": BHARATPE_MERCHANT_ID
+    }
+    headers = {
+        "token": BHARATPE_TOKEN,
+        "Content-Type": "application/json"
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params, timeout=10) as resp:
+                if resp.status != 200:
+                    return 'API_ERROR'
+                result = await resp.json()
+                
+                # Response structure:
+                # { "status": true, "message": "SUCCESS", "data": { "transactions": [...] } }
+                transactions = result.get("data", {}).get("transactions", []) or []
+                
+                for tx in transactions:
+                    # Extract UTR from common fields
+                    tx_utr = tx.get("utr") or tx.get("bankReferenceNo") or tx.get("bankTxnId") or tx.get("transactionId") or tx.get("id")
+                    if not tx_utr:
+                        continue
+                    tx_utr = str(tx_utr).strip()
+                    
+                    if tx_utr == utr:
+                        # Match amount
+                        tx_amount = tx.get("amount")
+                        if tx_amount is not None:
+                            try:
+                                tx_amount = float(tx_amount)
+                            except ValueError:
+                                continue
+                            
+                            # Allow small float difference
+                            if abs(tx_amount - amount) < 0.01:
+                                # Check status
+                                tx_status = str(tx.get("status", "")).upper()
+                                if tx_status in ["SUCCESS", "SUCCESSFUL", "COMPLETED", "ACTIVE", "PAID"]:
+                                    return 'SUCCESS'
+                
+                return 'NOT_FOUND'
+    except Exception as e:
+        print(f"BharatPe API Error: {e}")
+        return 'API_ERROR'
 
 # ==================================================================
 # 🛠️ HELPER: QR CODE GENERATOR (In-Memory)
@@ -166,58 +227,189 @@ async def pay_upi_ask_amount(c, cb):
 
 
 @Client.on_message(filters.text & filters.private & ~filters.command(["start", "deposit", "admin"]), group=1)
-async def check_amount_input(c, msg):
-    """Step 2: Read the amount, then show the QR code for that amount."""
+async def handle_deposit_text_input(c, msg):
+    """Handles all text inputs for deposits (Amount and UTR)."""
     user_id = msg.from_user.id
 
     # 1. Check State
     if user_id not in deposit_session: return
     state = deposit_session[user_id]
-    if state.get("mode") != "waiting_amount": return
+    mode = state.get("mode")
 
-    # 2. Cleanup User Input
-    try: await msg.delete()
-    except: pass
+    if mode == "waiting_amount":
+        # 2. Cleanup User Input
+        try: await msg.delete()
+        except: pass
 
-    # 3. Validate Amount
-    amount_text = msg.text.strip()
-    if not amount_text.isdigit() or int(amount_text) <= 0:
-        temp = await c.send_message(user_id, "❌ <b>Galat Amount!</b>\nSahi number bhejein (e.g. 500).")
-        await asyncio.sleep(3); await temp.delete()
+        # 3. Validate Amount
+        amount_text = msg.text.strip()
+        if not amount_text.isdigit() or int(amount_text) <= 0:
+            temp = await c.send_message(user_id, "❌ <b>Galat Amount!</b>\nSahi number bhejein (e.g. 500).")
+            await asyncio.sleep(3); await temp.delete()
+            return
+
+        amount = int(amount_text)
+
+        # 4. Move to waiting_utr_button state, store amount + type
+        deposit_session[user_id] = {"mode": "waiting_utr_button", "type": "upi", "amount": amount}
+
+        # 5. Generate Dynamic QR with amount
+        qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+
+        text = (
+            "<b>💳 UPI AUTOMATIC PAYMENT</b>\n"
+            f"{DIVIDER}\n"
+            f"💰 <b>Amount:</b> ₹{amount}\n"
+            f"🆔 <b>UPI ID:</b> <code>{PAYMENT_UPI_ID}</code>\n"
+            f"{DIVIDER}\n"
+            "<b>STEPS TO PAY:</b>\n"
+            "1️⃣ Scan QR ya UPI ID copy karein.\n"
+            f"2️⃣ Exactly ₹{amount} pay karein.\n"
+            "3️⃣ Payment complete hone ke baad transaction ka **12-digit Ref No / UTR** copy karein.\n\n"
+            "👇 **Niche diye gaye button par click karke UTR submit karein:**"
+        )
+        buttons = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✍️ Submit UTR", callback_data="submit_upi_utr")],
+            [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+        ])
+
+        sent_msg = await c.send_photo(
+            user_id,
+            photo=qr_image,
+            caption=text,
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=buttons
+        )
+        deposit_session[user_id]["menu_id"] = sent_msg.id
+
+    elif mode == "waiting_utr":
+        # 2. Cleanup User Input
+        try: await msg.delete()
+        except: pass
+
+        utr_text = msg.text.strip()
+        if not utr_text.isdigit() or len(utr_text) != 12:
+            temp = await c.send_message(user_id, "❌ <b>Galat UTR Format!</b>\nUPI UTR number exactly 12 digits ka hona chahiye. Dobara sahi UTR bhejein.")
+            await asyncio.sleep(4); await temp.delete()
+            return
+
+        amount = state.get("amount")
+
+        # Show checking status
+        checking_msg = await c.send_message(user_id, "🔍 <b>BharatPe transaction verify ho raha hai...</b>\nKripya thoda wait karein.")
+
+        # Verify transaction
+        verification_status = await verify_bharatpe_payment(utr_text, amount)
+        await checking_msg.delete()
+
+        if verification_status == 'SUCCESS':
+            # Log successful deposit in DB
+            db_status = await create_deposit(user_id, amount, utr_text, "upi_auto", "success")
+
+            if db_status == "duplicate":
+                await c.send_message(user_id, "❌ <b>Duplicate UTR!</b>\nYeh transaction pehle se hi claim/redeem kiya ja chuka hai.")
+                return
+
+            await update_balance(user_id, amount)
+
+            # Check referral milestone
+            from database import check_referral_milestone
+            referrer_id = await check_referral_milestone(user_id, amount)
+            if referrer_id:
+                try:
+                    await c.send_message(referrer_id, f"🎉 <b>Referral Bonus!</b>\nYour invitee deposited funds.\n💰 <b>You got:</b> ₹20")
+                except: pass
+
+            # Clear deposit session
+            clear_deposit_session(user_id)
+
+            # Notify User
+            await c.send_message(
+                user_id,
+                f"<b>✅ DEPOSIT SUCCESSFUL!</b>\n"
+                f"{DIVIDER}\n"
+                f"💰 <b>Credited:</b> ₹{amount}\n"
+                f"🔢 <b>UTR:</b> <code>{utr_text}</code>\n"
+                f"{DIVIDER}\n"
+                f"<i>Bot me aapka balance add kar diya gaya hai. Use /start to check balance.</i>",
+                parse_mode=enums.ParseMode.HTML
+            )
+
+            # Log to Admin Group
+            log_text = (
+                f"<b>🇮🇳 UPI AUTO DEPOSIT APPROVED</b>\n"
+                f"{DIVIDER}\n"
+                f"👤 <b>User:</b> {msg.from_user.mention} (`{user_id}`)\n"
+                f"💰 <b>Amount:</b> ₹{amount}\n"
+                f"🔢 <b>UTR:</b> <code>{utr_text}</code>\n"
+                f"🟢 <b>Status:</b> Auto Approved (BharatPe)\n"
+                f"{DIVIDER}"
+            )
+            if ADMIN_GROUP_ID:
+                try:
+                    await c.send_message(ADMIN_GROUP_ID, log_text, parse_mode=enums.ParseMode.HTML)
+                except Exception as e:
+                    print(f"Failed to send log to ADMIN_GROUP_ID: {e}")
+
+        elif verification_status == 'DUPLICATE':
+            await c.send_message(user_id, "❌ <b>Duplicate UTR!</b>\nYeh transaction pehle se hi claim/redeem kiya ja chuka hai.")
+
+        elif verification_status == 'NOT_FOUND':
+            await c.send_message(
+                user_id,
+                "❌ <b>Payment Not Found!</b>\n"
+                "Transaction verify nahi ho paya. Kripya check karein:\n"
+                "1. Kya aapne transaction successfully complete kiya hai?\n"
+                "2. Kya aapne exactly utna hi amount pay kiya hai?\n"
+                "3. Kya UTR number bilkul sahi enter kiya hai?\n\n"
+                "<i>Thodi der baad dobara check karein ya direct Support se contact karein.</i>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✍️ Retry UTR", callback_data="submit_upi_utr")],
+                    [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+                ]),
+                parse_mode=enums.ParseMode.HTML
+            )
+
+        elif verification_status == 'API_ERROR':
+            await c.send_message(
+                user_id,
+                "⚠️ <b>Verification API Error!</b>\n"
+                "BharatPe API respond nahi kar rahi hai. Kripya thodi der baad dobara UTR submit karein.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✍️ Try Again", callback_data="submit_upi_utr")],
+                    [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+                ]),
+                parse_mode=enums.ParseMode.HTML
+            )
+
+
+@Client.on_callback_query(filters.regex("submit_upi_utr"))
+async def ask_upi_utr(c, cb):
+    user_id = cb.from_user.id
+    if user_id not in deposit_session:
+        await cb.answer("⚠️ Session expired! Please restart deposit.", show_alert=True)
         return
 
-    amount = int(amount_text)
+    # Update state to waiting_utr
+    amount = deposit_session[user_id].get("amount")
+    deposit_session[user_id]["mode"] = "waiting_utr"
 
-    # 4. Move to waiting_proof state, store amount + type
-    deposit_session[user_id] = {"mode": "waiting_proof", "type": "upi", "amount": amount}
+    try:
+        await cb.message.delete()
+    except:
+        pass
 
-    # 5. Generate Dynamic QR with amount
-    qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
-
-    text = (
-        "<b>💳 UPI PAYMENT</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 <b>Amount:</b> ₹{amount}\n"
-        f"🆔 <b>UPI ID:</b> <code>{PAYMENT_UPI_ID}</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "<b>STEPS TO PAY:</b>\n"
-        "1️⃣ Scan QR ya UPI ID copy karein.\n"
-        f"2️⃣ Exactly ₹{amount} pay karein.\n"
-        "3️⃣ <b>Payment ka screenshot yahan bhejein.</b>\n\n"
-        "<i>Bot aapke screenshot ka wait kar raha hai...</i>"
-    )
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
-    ])
-
-    sent_msg = await c.send_photo(
+    sent = await c.send_message(
         user_id,
-        photo=qr_image,
-        caption=text,
-        parse_mode=enums.ParseMode.HTML,
-        reply_markup=buttons
+        f"<b>✍️ ENTER UPI UTR</b>\n"
+        f"{DIVIDER}\n"
+        f"💰 <b>Amount:</b> ₹{amount}\n\n"
+        f"Aapne jo ₹{amount} pay kiya hai, uska **12-digit UTR / Ref No** reply me bhejein.\n"
+        f"<i>Example: 618928374901</i>",
+        reply_markup=ForceReply(placeholder="Enter 12-digit UTR..."),
+        parse_mode=enums.ParseMode.HTML
     )
-    deposit_session[user_id]["menu_id"] = sent_msg.id
+    deposit_session[user_id]["menu_id"] = sent.id
 
 
 # ==================================================================
