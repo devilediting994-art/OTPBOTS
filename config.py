@@ -1,9 +1,9 @@
 import os
 from os import getenv
 
-API_ID = int(getenv("API_ID", "24790031")) 
-API_HASH = getenv("API_HASH", "0c7a496a6e33e862be48af651b935cce")
-BOT_TOKEN = getenv("BOT_TOKEN", "8834H28PrmzU")
+API_ID = int(getenv("API_ID", "35094834")) 
+API_HASH = getenv("API_HASH", "961be8ee9d4bb1462d0ec6539fd40ea6")
+BOT_TOKEN = getenv("BOT_TOKEN", "8859410688:AAGjod9ONoeHjCXX-luaKGtuvLpIEIN1KWQ")
 
 MONGO_URI = getenv("MONGO_URI", "mongodb+srv://Meority")
 
