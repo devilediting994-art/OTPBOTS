@@ -3,7 +3,7 @@ from os import getenv
 
 API_ID = int(getenv("API_ID", "35094834")) 
 API_HASH = getenv("API_HASH", "961be8ee9d4bb1462d0ec6539fd40ea6")
-BOT_TOKEN = getenv("BOT_TOKEN", "8859410688:AAGjod9ONoeHjCXX-luaKGtuvLpIEIN1KWQ")
+BOT_TOKEN = getenv("BOT_TOKEN", "8690365675:AAE_PEQ0DTA4cgMDkcI8tWCuSSd_clJyqRs")
 
 MONGO_URI = getenv("MONGO_URI", "mongodb+srv://devilharshit02:devilharshit02@cluster0.9efk59a.mongodb.net/?appName=Cluster0")
 
@@ -14,14 +14,14 @@ ADMIN_GROUP_ID = -5109337216
 USDT_RATE = 90.0  
 
 PAYMENT_UPI_ID = "pandeyharshit269@okaxis"
-BINANCE_ID = "1193032529"
-TRC20_ADDRESS = "TN3J2Ut6NNkqpWuy7m61UfG1oQG2onXLnm"
+BINANCE_ID = ""
+TRC20_ADDRESS = ""
 
 BHARATPE_MERCHANT_ID = "25048958"
 BHARATPE_TOKEN = "89eaba46d7e241539f8303969e66eb16"
 
 LOG_CHANNEL = -1001873723467
 DEFAULT_FSUB_ID = -1001973643750
-DEFAULT_FSUB_LINK = "https://t.me/Aegis_JI"
+DEFAULT_FSUB_LINK = "https://t.me/KRYON_JI"
 
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━"
