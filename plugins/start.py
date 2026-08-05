@@ -251,7 +251,7 @@ async def handle_reply_text(c, msg):
         await msg.reply_text(
             "📞 <b>Customer Support:</b>\n"
 "👤 @NAKS4PANDIT\n"
-"👤 @YOURUSERNAME\n"
+"👤 @sourya791m_bot\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "<i>• Send Payment Proofs\n• Report Login Issues\n• Bulk Orders</i>",
             parse_mode=enums.ParseMode.HTML
