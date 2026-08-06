@@ -247,23 +247,16 @@ async def handle_reply_text(c, msg):
         )
         await msg.reply_text(text, parse_mode=enums.ParseMode.HTML)
 
-        elif btn_text == "📞 Support":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("👤 NAKS4PANDIT", url="https://t.me/NAKS4PANDIT"),
-                InlineKeyboardButton("👤 SOURYA", url="https://t.me/sourya791m_bot")
-            ]
-        ])
-
+    elif btn_text == "📞 Support":
         await msg.reply_text(
-            "📞 <b>Customer Support</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<i>• Send Payment Proofs\n"
-            "• Report Login Issues\n"
-            "• Bulk Orders</i>",
-            parse_mode=enums.ParseMode.HTML,
-            reply_markup=keyboard
+            "📞 <b>Customer Support:</b>\n"
+"👤 @NAKS4PANDIT\n"
+"👤 @sourya791m_bot\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "<i>• Send Payment Proofs\n• Report Login Issues\n• Bulk Orders</i>",
+            parse_mode=enums.ParseMode.HTML
         )
+
     elif btn_text == "📖 How to Use":
         await msg.reply_text(
             "📖 <b>Quick User Guide:</b>\n"
