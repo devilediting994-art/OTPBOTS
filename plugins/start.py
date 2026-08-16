@@ -105,9 +105,10 @@ async def show_fsub(client, message, missing_channels):
 
 async def show_main_menu(client, message):
     user_name = message.from_user.first_name or "User"
+    user_mention = f'<a href="tg://user?id={message.from_user.id}">{user_name}</a>'
 
-        text = (
-        f"👋 <b>Hey, {user_name}!</b> 🦅\n"
+    text = (
+        f"👋 <b>Hey, {user_mention}!</b> 🦅\n"
         f"╰─ <i>Welcome to the Premium Store</i> 🥂\n\n"
 
         f"┏━━━━━━━━━━━━━━━━━━┓\n"
@@ -120,17 +121,18 @@ async def show_main_menu(client, message):
 
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"🚀 <b>Why Choose Us?</b>\n\n"
-        f"  ⚡ <b>Instant Delivery</b>\n"
-        f"  🔐 <b>Secure & Reliable</b>\n"
-        f"  💬 <b>Dedicated Support</b>\n"
-        f"  💎 <b>Premium Quality</b>\n\n"
+        f"🚀 <b>Why Choose Us?</b>\n"
+        f"⚡ <b>Instant Delivery</b>\n"
+        f"🔐 <b>Secure & Reliable</b>\n"
+        f"💬 <b>Dedicated Support</b>\n"
+        f"💎 <b>Premium Quality</b>\n\n"
 
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
 
         f"✨ <b>Premium Service. Better Experience.</b>\n"
         f"👇 <i>Select a service from the keyboard below.</i>"
-        )
+    )
+
     reply_kb = ReplyKeyboardMarkup(
         [
             ["📱 Buy Accounts", "📂 Buy Sessions"],
@@ -140,17 +142,14 @@ async def show_main_menu(client, message):
         ],
         resize_keyboard=True
     )
-    
+
     msg_obj = message.message if isinstance(message, CallbackQuery) else message
-    chat_id = msg_obj.chat.id
 
-    try:
-        await msg_obj.delete()
-    except:
-        pass
-    
-    await client.send_message(chat_id, text, reply_markup=reply_kb, parse_mode=enums.ParseMode.HTML)
-
+    await msg_obj.reply_text(
+        text,
+        reply_markup=reply_kb,
+        parse_mode=enums.ParseMode.HTML
+    )
 # ==================================================================
 # 🚦 STEP 2: HANDLERS
 # ==================================================================
