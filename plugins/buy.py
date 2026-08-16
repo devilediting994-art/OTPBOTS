@@ -26,6 +26,9 @@ async def show_category_list(c, message_or_callback):
     page = 1
     category = "accounts"
 
+    # ------------------------------------------------------------
+    # CALLBACK DATA
+    # ------------------------------------------------------------
     if is_cb:
         data = message_or_callback.data
 
@@ -37,7 +40,9 @@ async def show_category_list(c, message_or_callback):
         elif data.startswith("cat_"):
             category = data.replace("cat_", "")
 
-    # Get live countries from database
+    # ------------------------------------------------------------
+    # GET COUNTRIES FROM DATABASE
+    # ------------------------------------------------------------
     countries = await get_unique_countries()
 
     if not countries:
@@ -57,46 +62,64 @@ async def show_category_list(c, message_or_callback):
             parse_mode=enums.ParseMode.HTML
         )
 
+    # ------------------------------------------------------------
+    # COUNTRY BUTTONS + LIVE STOCK/PRICE INFORMATION
+    # ------------------------------------------------------------
     items_list = []
     country_details = []
 
-    # Build country buttons + live stock information
     for item in countries:
 
         name = item["_id"]
 
-        # Remove unwanted white flag
+        # Don't use white flag as fallback
         flag = item.get("flag") or ""
 
+        # Remove accidental white flag
         if flag in ("🏳️", "🏳"):
             flag = ""
 
-        # Get LIVE stock and prices for this country
+        # Get live buckets for this country
         buckets = await get_buckets_by_country(name)
 
+        if not buckets:
+            continue
+
+        # Total live stock
         total_stock = sum(
             int(b.get("count", 0))
             for b in buckets
         )
 
-        # Collect prices with their individual stock
+        # --------------------------------------------------------
+        # PRICE DISPLAY
+        # --------------------------------------------------------
         price_parts = []
 
         for b in buckets:
-            price = b.get("price", 0)
-            count = b.get("count", 0)
+            price_inr = float(b.get("price", 0))
+            stock_count = int(b.get("count", 0))
+
+            # INR -> USDT
+            if USDT_RATE and USDT_RATE > 0:
+                price_usdt = round(
+                    price_inr / float(USDT_RATE),
+                    2
+                )
+            else:
+                price_usdt = 0
 
             price_parts.append(
-                f"₹{price} × {count}"
+                f"${price_usdt:.2f} (₹{price_inr:g})"
             )
 
-        if price_parts:
-            price_text = " • ".join(price_parts)
+        # --------------------------------------------------------
+        # BUTTON
+        # --------------------------------------------------------
+        if flag:
+            button_text = f"{flag} {name}"
         else:
-            price_text = "Out of Stock"
-
-        # Button WITHOUT unwanted white flag
-        button_text = f"{flag} {name}".strip()
+            button_text = name
 
         items_list.append({
             "text": button_text,
@@ -107,40 +130,76 @@ async def show_category_list(c, message_or_callback):
             "name": name,
             "flag": flag,
             "stock": total_stock,
-            "price_text": price_text
+            "price_parts": price_parts
         })
 
     # ------------------------------------------------------------
-    # Show only countries of the current page in the information
+    # IF NOTHING AVAILABLE
     # ------------------------------------------------------------
+    if not items_list:
+        text = (
+            "<b>🚫 OUT OF STOCK</b>\n\n"
+            "No accounts are available right now."
+        )
 
+        if is_cb:
+            return await message_or_callback.answer(
+                "Stock Empty!",
+                show_alert=True
+            )
+
+        return await msg.reply_text(
+            text,
+            parse_mode=enums.ParseMode.HTML
+        )
+
+    # ------------------------------------------------------------
+    # PAGINATION
+    # ------------------------------------------------------------
     items_per_page = 10
+
     start_index = (page - 1) * items_per_page
     end_index = start_index + items_per_page
 
-    current_details = country_details[start_index:end_index]
+    current_details = country_details[
+        start_index:end_index
+    ]
 
+    # ------------------------------------------------------------
+    # BUILD STOCK + PRICE TEXT
+    # ------------------------------------------------------------
     stock_lines = []
 
     for info in current_details:
-        flag = info["flag"]
-        name = info["name"]
-        stock = info["stock"]
-        price_text = info["price_text"]
 
+        name = info["name"]
+        flag = info["flag"]
+        stock = info["stock"]
+        price_parts = info["price_parts"]
+
+        # Country display
         if flag:
             country_title = f"{flag} {name}"
         else:
             country_title = name
 
+        # If multiple price buckets exist
+        if len(price_parts) == 1:
+            price_text = price_parts[0]
+        else:
+            price_text = " • ".join(price_parts)
+
         stock_lines.append(
-            f"🌍 <b>{country_title}</b>\n"
-            f"   📦 <b>Stock:</b> {stock}  •  💰 <b>{price_text}</b>"
+            f"🌍 <b>{country_title}</b> — "
+            f"{price_text} "
+            f"📦 <b>Stock:</b> {stock}"
         )
 
-    stock_info = "\n\n".join(stock_lines)
+    stock_info = "\n".join(stock_lines)
 
-    # Pagination keyboard
+    # ------------------------------------------------------------
+    # PAGINATION KEYBOARD
+    # ------------------------------------------------------------
     kb = get_pagination_keyboard(
         current_page=page,
         total_count=len(items_list),
@@ -149,16 +208,21 @@ async def show_category_list(c, message_or_callback):
         row_width=2
     )
 
-    # Premium live stock header
+    # ------------------------------------------------------------
+    # MAIN MESSAGE
+    # ------------------------------------------------------------
     header_text = (
-        f"<b>🌍 SELECT COUNTRY ({category.upper()})</b>\n"
-        f"{get_divider()}\n"
-        f"📊 <b>LIVE STOCK & PRICE</b>\n\n"
+        f"<b>🌍 Choose Your Country</b>\n\n"
+        f"⚡ <b>Current Exchange:</b> "
+        f"1 USDT ≈ ₹{USDT_RATE:g}\n\n"
+        f"📱 <b>Available Accounts & Prices</b>\n\n"
         f"{stock_info}\n\n"
-        f"{get_divider()}\n"
-        f"👇 <b>Choose a country to continue:</b>"
+        f"👇 <b>Select your preferred country below:</b>"
     )
 
+    # ------------------------------------------------------------
+    # SEND / EDIT MESSAGE
+    # ------------------------------------------------------------
     if is_cb:
         await message_or_callback.answer()
 
@@ -173,7 +237,225 @@ async def show_category_list(c, message_or_callback):
             header_text,
             parse_mode=enums.ParseMode.HTML,
             reply_markup=kb
+    )async def show_category_list(c, message_or_callback):
+    is_cb = isinstance(message_or_callback, CallbackQuery)
+    msg = message_or_callback.message if is_cb else message_or_callback
+
+    page = 1
+    category = "accounts"
+
+    # ------------------------------------------------------------
+    # CALLBACK DATA
+    # ------------------------------------------------------------
+    if is_cb:
+        data = message_or_callback.data
+
+        if data.startswith("page_cat_"):
+            cat_part, page_str = data.replace("page_cat_", "").rsplit("_", 1)
+            category = cat_part
+            page = int(page_str)
+
+        elif data.startswith("cat_"):
+            category = data.replace("cat_", "")
+
+    # ------------------------------------------------------------
+    # GET COUNTRIES FROM DATABASE
+    # ------------------------------------------------------------
+    countries = await get_unique_countries()
+
+    if not countries:
+        text = (
+            "<b>🚫 OUT OF STOCK</b>\n\n"
+            "No stock available right now."
         )
+
+        if is_cb:
+            return await message_or_callback.answer(
+                "Stock Empty!",
+                show_alert=True
+            )
+
+        return await msg.reply_text(
+            text,
+            parse_mode=enums.ParseMode.HTML
+        )
+
+    # ------------------------------------------------------------
+    # COUNTRY BUTTONS + LIVE STOCK/PRICE INFORMATION
+    # ------------------------------------------------------------
+    items_list = []
+    country_details = []
+
+    for item in countries:
+
+        name = item["_id"]
+
+        # Don't use white flag as fallback
+        flag = item.get("flag") or ""
+
+        # Remove accidental white flag
+        if flag in ("🏳️", "🏳"):
+            flag = ""
+
+        # Get live buckets for this country
+        buckets = await get_buckets_by_country(name)
+
+        if not buckets:
+            continue
+
+        # Total live stock
+        total_stock = sum(
+            int(b.get("count", 0))
+            for b in buckets
+        )
+
+        # --------------------------------------------------------
+        # PRICE DISPLAY
+        # --------------------------------------------------------
+        price_parts = []
+
+        for b in buckets:
+            price_inr = float(b.get("price", 0))
+            stock_count = int(b.get("count", 0))
+
+            # INR -> USDT
+            if USDT_RATE and USDT_RATE > 0:
+                price_usdt = round(
+                    price_inr / float(USDT_RATE),
+                    2
+                )
+            else:
+                price_usdt = 0
+
+            price_parts.append(
+                f"${price_usdt:.2f} (₹{price_inr:g})"
+            )
+
+        # --------------------------------------------------------
+        # BUTTON
+        # --------------------------------------------------------
+        if flag:
+            button_text = f"{flag} {name}"
+        else:
+            button_text = name
+
+        items_list.append({
+            "text": button_text,
+            "callback_data": f"country_{category}_{name}"
+        })
+
+        country_details.append({
+            "name": name,
+            "flag": flag,
+            "stock": total_stock,
+            "price_parts": price_parts
+        })
+
+    # ------------------------------------------------------------
+    # IF NOTHING AVAILABLE
+    # ------------------------------------------------------------
+    if not items_list:
+        text = (
+            "<b>🚫 OUT OF STOCK</b>\n\n"
+            "No accounts are available right now."
+        )
+
+        if is_cb:
+            return await message_or_callback.answer(
+                "Stock Empty!",
+                show_alert=True
+            )
+
+        return await msg.reply_text(
+            text,
+            parse_mode=enums.ParseMode.HTML
+        )
+
+    # ------------------------------------------------------------
+    # PAGINATION
+    # ------------------------------------------------------------
+    items_per_page = 10
+
+    start_index = (page - 1) * items_per_page
+    end_index = start_index + items_per_page
+
+    current_details = country_details[
+        start_index:end_index
+    ]
+
+    # ------------------------------------------------------------
+    # BUILD STOCK + PRICE TEXT
+    # ------------------------------------------------------------
+    stock_lines = []
+
+    for info in current_details:
+
+        name = info["name"]
+        flag = info["flag"]
+        stock = info["stock"]
+        price_parts = info["price_parts"]
+
+        # Country display
+        if flag:
+            country_title = f"{flag} {name}"
+        else:
+            country_title = name
+
+        # If multiple price buckets exist
+        if len(price_parts) == 1:
+            price_text = price_parts[0]
+        else:
+            price_text = " • ".join(price_parts)
+
+        stock_lines.append(
+            f"🌍 <b>{country_title}</b> — "
+            f"{price_text} "
+            f"📦 <b>Stock:</b> {stock}"
+        )
+
+    stock_info = "\n".join(stock_lines)
+
+    # ------------------------------------------------------------
+    # PAGINATION KEYBOARD
+    # ------------------------------------------------------------
+    kb = get_pagination_keyboard(
+        current_page=page,
+        total_count=len(items_list),
+        data_list=items_list,
+        callback_prefix=f"page_cat_{category}",
+        row_width=2
+    )
+
+    # ------------------------------------------------------------
+    # MAIN MESSAGE
+    # ------------------------------------------------------------
+    header_text = (
+        f"<b>🌍 Choose Your Country</b>\n\n"
+        f"⚡ <b>Current Exchange:</b> "
+        f"1 USDT ≈ ₹{USDT_RATE:g}\n\n"
+        f"📱 <b>Available Accounts & Prices</b>\n\n"
+        f"{stock_info}\n\n"
+        f"👇 <b>Select your preferred country below:</b>"
+    )
+
+    # ------------------------------------------------------------
+    # SEND / EDIT MESSAGE
+    # ------------------------------------------------------------
+    if is_cb:
+        await message_or_callback.answer()
+
+        await msg.edit_text(
+            header_text,
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=kb
+        )
+
+    else:
+        await msg.reply_text(
+            header_text,
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=kb
+            )
 
 
 # ==================================================================
