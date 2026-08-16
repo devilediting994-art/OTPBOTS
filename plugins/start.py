@@ -105,22 +105,27 @@ async def show_fsub(client, message, missing_channels):
 
 async def show_main_menu(client, message):
     user_name = message.from_user.first_name or "User"
+user_mention = f'<a href="tg://user?id={message.from_user.id}">{user_name}</a>'
 
-    text = (
-        f"👋 <b>Hey, {user_name}!</b> 🦅\n"
-        f"<b>Welcome to our Premium Account Store.</b> 🥂\n\n"
-        f"🛒 <b>High-Quality Telegram Accounts & Sessions</b>\n"
-        f"🚀 <b>Fast Delivery • Smooth Experience</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🚀 <b>Fast & Secure Account Marketplace</b>\n"
-        f"⚡ Instant Delivery\n"
-        f"🔐 Reliable & Quality Accounts\n"
-        f"💬 Dedicated Support\n"
-        f"🔥 Smooth • Fast • Trusted Experience\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👇 <b>Select a service from the keyboard below.</b>"
-    )
+text = (
+    f'👋 <b>Hey, {user_mention}!</b> 🦅\n'
+    f'╰─ <i>Welcome to our Premium Account Store.</i> 🥂\n\n'
 
+    f'🛒 <b>HIGH-QUALITY TELEGRAM ACCOUNTS</b>\n'
+    f'   <i>Premium Accounts & Sessions</i>\n'
+    f'🚀 <b>FAST DELIVERY</b> • <i>SMOOTH EXPERIENCE</i>\n\n'
+
+    f'━━━━━━━━━━━━━━━━━━━━\n'
+    f'╭─ <b>⚡ PREMIUM MARKETPLACE</b>\n'
+    f'│\n'
+    f'├ 🚀 <b>Instant Delivery</b>\n'
+    f'├ 🔐 <b>Reliable & Quality</b>\n'
+    f'├ 💬 <b>Dedicated Support</b>\n'
+    f'└ 🔥 <b>Fast • Smooth • Trusted</b>\n'
+    f'╰━━━━━━━━━━━━━━━━━━━\n\n'
+
+    f'👇 <b>Select a service from the keyboard below.</b>'
+)
     reply_kb = ReplyKeyboardMarkup(
         [
             ["📱 Buy Accounts", "📂 Buy Sessions"],
