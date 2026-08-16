@@ -19,67 +19,161 @@ def small_caps(text):
 # ==================================================================
 
 @Client.on_callback_query(filters.regex(r"^(cat|page_cat)_(accounts|sessions)"))
-async def cat_router(c, cb):
-    try:
-        await show_category_list(c, cb)
-    except Exception as e:
-        print(f"Cat Pagination Error: {e}")
-        await cb.answer("❌ Error loading page!", show_alert=True)
-
 async def show_category_list(c, message_or_callback):
     is_cb = isinstance(message_or_callback, CallbackQuery)
     msg = message_or_callback.message if is_cb else message_or_callback
-    
-    # ROOF EXTRACTION
+
     page = 1
     category = "accounts"
-    
+
     if is_cb:
         data = message_or_callback.data
+
         if data.startswith("page_cat_"):
             cat_part, page_str = data.replace("page_cat_", "").rsplit("_", 1)
             category = cat_part
             page = int(page_str)
+
         elif data.startswith("cat_"):
             category = data.replace("cat_", "")
 
+    # Get live countries from database
     countries = await get_unique_countries()
-    
+
     if not countries:
-        text = "<b>🚫 OUT OF STOCK</b>\n\nNo stock available right now."
+        text = (
+            "<b>🚫 OUT OF STOCK</b>\n\n"
+            "No stock available right now."
+        )
+
         if is_cb:
-            return await message_or_callback.answer("Stock Empty!", show_alert=True)
-        return await msg.reply_text(text, parse_mode=enums.ParseMode.HTML)
+            return await message_or_callback.answer(
+                "Stock Empty!",
+                show_alert=True
+            )
+
+        return await msg.reply_text(
+            text,
+            parse_mode=enums.ParseMode.HTML
+        )
 
     items_list = []
+    country_details = []
+
+    # Build country buttons + live stock information
     for item in countries:
-        name = item["_id"] 
-        flag = item.get("flag") or "🏳️"
+
+        name = item["_id"]
+
+        # Remove unwanted white flag
+        flag = item.get("flag") or ""
+
+        if flag in ("🏳️", "🏳"):
+            flag = ""
+
+        # Get LIVE stock and prices for this country
+        buckets = await get_buckets_by_country(name)
+
+        total_stock = sum(
+            int(b.get("count", 0))
+            for b in buckets
+        )
+
+        # Collect prices with their individual stock
+        price_parts = []
+
+        for b in buckets:
+            price = b.get("price", 0)
+            count = b.get("count", 0)
+
+            price_parts.append(
+                f"₹{price} × {count}"
+            )
+
+        if price_parts:
+            price_text = " • ".join(price_parts)
+        else:
+            price_text = "Out of Stock"
+
+        # Button WITHOUT unwanted white flag
+        button_text = f"{flag} {name}".strip()
+
         items_list.append({
-            "text": f"{flag} {name}",
+            "text": button_text,
             "callback_data": f"country_{category}_{name}"
         })
 
+        country_details.append({
+            "name": name,
+            "flag": flag,
+            "stock": total_stock,
+            "price_text": price_text
+        })
+
+    # ------------------------------------------------------------
+    # Show only countries of the current page in the information
+    # ------------------------------------------------------------
+
+    items_per_page = 10
+    start_index = (page - 1) * items_per_page
+    end_index = start_index + items_per_page
+
+    current_details = country_details[start_index:end_index]
+
+    stock_lines = []
+
+    for info in current_details:
+        flag = info["flag"]
+        name = info["name"]
+        stock = info["stock"]
+        price_text = info["price_text"]
+
+        if flag:
+            country_title = f"{flag} {name}"
+        else:
+            country_title = name
+
+        stock_lines.append(
+            f"🌍 <b>{country_title}</b>\n"
+            f"   📦 <b>Stock:</b> {stock}  •  💰 <b>{price_text}</b>"
+        )
+
+    stock_info = "\n\n".join(stock_lines)
+
+    # Pagination keyboard
     kb = get_pagination_keyboard(
-        current_page=page, 
+        current_page=page,
         total_count=len(items_list),
         data_list=items_list,
         callback_prefix=f"page_cat_{category}",
-        row_width=2 
+        row_width=2
     )
 
+    # Premium live stock header
     header_text = (
         f"<b>🌍 SELECT COUNTRY ({category.upper()})</b>\n"
         f"{get_divider()}\n"
-        "👇 <b>Choose a country to see available products:</b>"
+        f"📊 <b>LIVE STOCK & PRICE</b>\n\n"
+        f"{stock_info}\n\n"
+        f"{get_divider()}\n"
+        f"👇 <b>Choose a country to continue:</b>"
     )
 
     if is_cb:
-        await message_or_callback.answer() # STOPS THE LOADING SPINNER
-        await msg.edit_text(header_text, parse_mode=enums.ParseMode.HTML, reply_markup=kb)
-    else:
-        await msg.reply_text(header_text, parse_mode=enums.ParseMode.HTML, reply_markup=kb)
+        await message_or_callback.answer()
 
+        await msg.edit_text(
+            header_text,
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=kb
+        )
+
+    else:
+        await msg.reply_text(
+            header_text,
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=kb
+        )
 
 
 # ==================================================================
