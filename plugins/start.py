@@ -104,12 +104,21 @@ async def show_fsub(client, message, missing_channels):
     await safe_send(message, text, InlineKeyboardMarkup(buttons))
 
 async def show_main_menu(client, message):
+    user_name = message.from_user.first_name or "User"
+
     text = (
-        "👋 <b>Welcome to Premium Store!</b>\n"
-        f"{get_divider()}\n"
-        "🛒 <i>High-Quality Telegram Accounts & Sessions.</i>\n"
-        "🚀 <i>Instant Delivery • Auto-Replacement</i>\n\n"
-        "👇 <b>Select a service from the keyboard below:</b>"
+        f"👋 <b>Hey, {user_name}!</b> 🦅\n"
+        f"<b>Welcome to our Premium Account Store.</b> 🥂\n\n"
+        f"🛒 <b>High-Quality Telegram Accounts & Sessions</b>\n"
+        f"🚀 <b>Fast Delivery • Smooth Experience</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🚀 <b>Fast & Secure Account Marketplace</b>\n"
+        f"⚡ Instant Delivery\n"
+        f"🔐 Reliable & Quality Accounts\n"
+        f"💬 Dedicated Support\n"
+        f"🔥 Smooth • Fast • Trusted Experience\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👇 <b>Select a service from the keyboard below.</b>"
     )
 
     reply_kb = ReplyKeyboardMarkup(
