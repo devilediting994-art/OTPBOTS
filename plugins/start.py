@@ -107,31 +107,28 @@ async def show_main_menu(client, message):
     user_name = message.from_user.first_name or "User"
     user_mention = f'<a href="tg://user?id={message.from_user.id}">{user_name}</a>'
 
-    text = (
+        text = (
         f"👋 <b>Hey, {user_mention}!</b> 🦅\n"
-        f"╰─ <i>Welcome to the Premium Store</i> 🥂\n\n"
+        f"╰─ <i>Welcome to our Premium Store</i> 🥂\n\n"
 
-        f"┏━━━━━━━━━━━━━━━━━━┓\n"
-        f"   🛍️ <b>PREMIUM MARKETPLACE</b>\n"
-        f"┗━━━━━━━━━━━━━━━━━━┛\n\n"
+        f"🛍️ <b>PREMIUM ACCOUNT MARKETPLACE</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
 
         f"🛒 <b>Telegram Accounts & Sessions</b>\n"
-        f"⚡ <i>Fast Delivery</i>  •  🔐 <i>Reliable</i>\n"
+        f"🚀 <i>Fast Delivery</i>  •  🔐 <i>Reliable</i>\n"
         f"💎 <i>Premium Quality • Smooth Experience</i>\n\n"
 
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-
-        f"🚀 <b>Why Choose Us?</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚀 <b>WHY CHOOSE US?</b>\n\n"
         f"⚡ <b>Instant Delivery</b>\n"
         f"🔐 <b>Secure & Reliable</b>\n"
         f"💬 <b>Dedicated Support</b>\n"
-        f"💎 <b>Premium Quality</b>\n\n"
-
+        f"💎 <b>Premium Quality</b>\n"
+        f"🔥 <b>Fast • Smooth • Trusted</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"✨ <b>Premium Service. Better Experience.</b>\n"
-        f"👇 <i>Select a service from the keyboard below.</i>"
-    )
+        f"👇 <b>Select a service from the keyboard below.</b>"
+        )
 
     reply_kb = ReplyKeyboardMarkup(
         [
