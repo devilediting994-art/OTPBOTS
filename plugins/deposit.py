@@ -3,7 +3,7 @@ import qrcode
 import io
 from hydrogram import Client, filters, enums
 from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, CallbackQuery, Message
-from config import ADMINS, PAYMENT_UPI_ID, BINANCE_ID, TRC20_ADDRESS, ADMIN_GROUP_ID, BHARATPE_MERCHANT_ID, BHARATPE_TOKEN, DIVIDER
+from config import ADMINS, PAYMENT_UPI_ID, AUTO_PAYMENT_UPI_ID, MANUAL_PAYMENT_UPI_ID, BINANCE_ID, TRC20_ADDRESS, ADMIN_GROUP_ID, BHARATPE_MERCHANT_ID, BHARATPE_TOKEN, DIVIDER
 import aiohttp
 from database import get_user, update_balance, create_deposit, get_deposit
 from utils import format_price
