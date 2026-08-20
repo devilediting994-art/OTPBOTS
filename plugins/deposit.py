@@ -200,15 +200,48 @@ async def deposit_callback(c, cb):
 # ==================================================================
 
 @Client.on_callback_query(filters.regex("pay_upi_start"))
-async def pay_upi_ask_amount(c, cb):
-    """Step 1: Ask user how much they want to deposit."""
+async def pay_upi_method_menu(c, cb):
+    """Show UPI payment verification method selection."""
     user_id = cb.from_user.id
-
-    # 1. Set State - waiting for amount
-    deposit_session[user_id] = {"mode": "waiting_amount", "menu_id": cb.message.id}
+    clear_deposit_session(user_id)
 
     text = (
         "<b>💳 UPI PAYMENT</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 <b>Verification method select karein:</b>\n\n"
+        "⚡ <b>Automatic Payment Verification</b>\n"
+        "Payment ke baad UTR BharatPe API se automatically verify hoga.\n\n"
+        "📝 <b>Manual Verification</b>\n"
+        "Payment screenshot admin ko bheja jayega aur admin manually approve/reject karega."
+    )
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚡ Automatic Payment Verification", callback_data="upi_auto_start")],
+        [InlineKeyboardButton("📝 Manual Verification", callback_data="upi_manual_start")],
+        [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+    ])
+
+    try:
+        await cb.message.edit_text(text, parse_mode=enums.ParseMode.HTML, reply_markup=buttons)
+    except Exception:
+        try: await cb.message.delete()
+        except: pass
+        sent = await c.send_message(user_id, text, parse_mode=enums.ParseMode.HTML, reply_markup=buttons)
+        deposit_session[user_id] = {"mode": "upi_method_menu", "menu_id": sent.id}
+
+
+async def _start_upi_amount(c, cb, verification_mode):
+    """Ask UPI deposit amount and remember auto/manual verification mode."""
+    user_id = cb.from_user.id
+    deposit_session[user_id] = {
+        "mode": "waiting_amount",
+        "type": "upi",
+        "verification": verification_mode,
+        "menu_id": cb.message.id
+    }
+
+    title = "⚡ UPI AUTOMATIC PAYMENT" if verification_mode == "auto" else "📝 UPI MANUAL VERIFICATION"
+    text = (
+        f"<b>{title}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "👇 <b>Kitna amount deposit karna chahte hain?</b>\n"
         "<i>Amount number me type karke bhejein (e.g. 500)</i>"
@@ -224,6 +257,16 @@ async def pay_upi_ask_amount(c, cb):
         except: pass
         sent = await c.send_message(user_id, text, parse_mode=enums.ParseMode.HTML, reply_markup=buttons)
         deposit_session[user_id]["menu_id"] = sent.id
+
+
+@Client.on_callback_query(filters.regex("upi_auto_start"))
+async def upi_auto_start(c, cb):
+    await _start_upi_amount(c, cb, "auto")
+
+
+@Client.on_callback_query(filters.regex("upi_manual_start"))
+async def upi_manual_start(c, cb):
+    await _start_upi_amount(c, cb, "manual")
 
 
 @Client.on_message(filters.text & filters.private & ~filters.command(["start", "deposit", "admin"]), group=1)
@@ -250,28 +293,61 @@ async def handle_deposit_text_input(c, msg):
 
         amount = int(amount_text)
 
-        # 4. Move to waiting_utr_button state, store amount + type
-        deposit_session[user_id] = {"mode": "waiting_utr_button", "type": "upi", "amount": amount}
+        verification_mode = state.get("verification", "auto")
 
-        # 5. Generate Dynamic QR with amount
-        qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+        if verification_mode == "manual":
+            # Manual UPI: no BharatPe API is required. Send screenshot to admin.
+            deposit_session[user_id] = {
+                "mode": "waiting_proof",
+                "type": "upi",
+                "verification": "manual",
+                "amount": amount
+            }
 
-        text = (
-            "<b>💳 UPI AUTOMATIC PAYMENT</b>\n"
-            f"{DIVIDER}\n"
-            f"💰 <b>Amount:</b> ₹{amount}\n"
-            f"🆔 <b>UPI ID:</b> <code>{PAYMENT_UPI_ID}</code>\n"
-            f"{DIVIDER}\n"
-            "<b>STEPS TO PAY:</b>\n"
-            "1️⃣ Scan QR ya UPI ID copy karein.\n"
-            f"2️⃣ Exactly ₹{amount} pay karein.\n"
-            "3️⃣ Payment complete hone ke baad transaction ka **12-digit Ref No / UTR** copy karein.\n\n"
-            "👇 **Niche diye gaye button par click karke UTR submit karein:**"
-        )
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✍️ Submit UTR", callback_data="submit_upi_utr")],
-            [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
-        ])
+            qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+            text = (
+                "<b>📝 UPI MANUAL VERIFICATION</b>\n"
+                f"{DIVIDER}\n"
+                f"💰 <b>Amount:</b> ₹{amount}\n"
+                f"🆔 <b>UPI ID:</b> <code>{PAYMENT_UPI_ID}</code>\n"
+                f"{DIVIDER}\n"
+                "<b>STEPS TO PAY:</b>\n"
+                "1️⃣ QR scan karein ya UPI ID par payment karein.\n"
+                f"2️⃣ Exactly ₹{amount} pay karein.\n"
+                "3️⃣ Payment ke baad transaction ka screenshot ready rakhein.\n"
+                "4️⃣ Neeche <b>Upload Payment Screenshot</b> par click karke screenshot bhejein.\n\n"
+                "⚠️ <i>Admin payment verify karke manually balance add karega.</i>"
+            )
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data="submit_upi_manual_proof")],
+                [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+            ])
+        else:
+            # Automatic UPI: existing BharatPe UTR verification flow.
+            deposit_session[user_id] = {
+                "mode": "waiting_utr_button",
+                "type": "upi",
+                "verification": "auto",
+                "amount": amount
+            }
+
+            qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+            text = (
+                "<b>💳 UPI AUTOMATIC PAYMENT</b>\n"
+                f"{DIVIDER}\n"
+                f"💰 <b>Amount:</b> ₹{amount}\n"
+                f"🆔 <b>UPI ID:</b> <code>{PAYMENT_UPI_ID}</code>\n"
+                f"{DIVIDER}\n"
+                "<b>STEPS TO PAY:</b>\n"
+                "1️⃣ Scan QR ya UPI ID copy karein.\n"
+                f"2️⃣ Exactly ₹{amount} pay karein.\n"
+                "3️⃣ Payment complete hone ke baad transaction ka <b>12-digit Ref No / UTR</b> copy karein.\n\n"
+                "👇 <b>Niche diye gaye button par click karke UTR submit karein:</b>"
+            )
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✍️ Submit UTR", callback_data="submit_upi_utr")],
+                [InlineKeyboardButton("🔙 Cancel", callback_data="deposit_home")]
+            ])
 
         sent_msg = await c.send_photo(
             user_id,
@@ -455,6 +531,32 @@ async def pay_crypto(c, cb):
         # Fail safe
         try: await c.send_message(cb.from_user.id, text, reply_markup=buttons)
         except: pass
+
+
+@Client.on_callback_query(filters.regex("submit_upi_manual_proof"))
+async def ask_upi_manual_proof(c, cb):
+    user_id = cb.from_user.id
+    state = deposit_session.get(user_id)
+    if not state or state.get("type") != "upi" or state.get("verification") != "manual":
+        await cb.answer("⚠️ Session expired! Please restart deposit.", show_alert=True)
+        return
+
+    state["mode"] = "waiting_proof"
+    state["menu_id"] = cb.message.id
+
+    try: await cb.message.delete()
+    except: pass
+    sent = await c.send_message(
+        user_id,
+        "<b>📸 SUBMIT UPI PAYMENT PROOF</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 <b>Amount:</b> ₹{state.get('amount')}\n\n"
+        "Payment ka screenshot bhejein.\n"
+        "<i>Admin screenshot verify karke manually balance add karega.</i>",
+        reply_markup=ForceReply(placeholder="Send Payment Screenshot..."),
+        parse_mode=enums.ParseMode.HTML
+    )
+    state["menu_id"] = sent.id
 
 
 @Client.on_callback_query(filters.regex("submit_crypto_proof"))
