@@ -14,9 +14,9 @@ ADMIN_GROUP_ID = -1004322196899
 USDT_RATE = 90.0  
 
 PAYMENT_UPI_ID = "pandeyharshit269@okaxis"
-# Separate UPI IDs for Auto and Manual verification
-AUTO_PAYMENT_UPI_ID = "pandeyharshit269@okicici"
-MANUAL_PAYMENT_UPI_ID = "pandeyharshit269-1@oksbi"
+# Separate UPI IDs for Auto and Manual verification. If not set, both fall back to PAYMENT_UPI_ID.
+AUTO_PAYMENT_UPI_ID = getenv("AUTO_PAYMENT_UPI_ID", PAYMENT_UPI_ID)
+MANUAL_PAYMENT_UPI_ID = getenv("MANUAL_PAYMENT_UPI_ID", PAYMENT_UPI_ID)
 BINANCE_ID = ""
 TRC20_ADDRESS = ""
 
