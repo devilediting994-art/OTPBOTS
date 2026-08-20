@@ -304,7 +304,7 @@ async def handle_deposit_text_input(c, msg):
                 "amount": amount
             }
 
-            qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+            qr_image = generate_upi_qr(AUTO_PAYMENT_UPI_ID, amount)
             text = (
                 "<b>📝 UPI MANUAL VERIFICATION</b>\n"
                 f"{DIVIDER}\n"
@@ -331,7 +331,7 @@ async def handle_deposit_text_input(c, msg):
                 "amount": amount
             }
 
-            qr_image = generate_upi_qr(PAYMENT_UPI_ID, amount)
+            qr_image = generate_upi_qr(MANUAL_PAYMENT_UPI_ID, amount)
             text = (
                 "<b>💳 UPI AUTOMATIC PAYMENT</b>\n"
                 f"{DIVIDER}\n"
